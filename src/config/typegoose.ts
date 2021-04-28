@@ -1,7 +1,7 @@
 import { db } from './mongoose';
 
 export const getSchemaOptions = () => ({
-  existingConnection: db && db,
+  existingConnection: db,
   options: {
     runSyncIndexes: true,
   },

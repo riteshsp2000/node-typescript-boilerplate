@@ -1,8 +1,11 @@
 // Libraries
 import mongoose from 'mongoose';
 
+// Constants
+import { MONGO_APP_URL } from '../constants';
+
 // Initialize Mongoose Connection
-export const init = () => {
+export const init = async () => {
   const MONGOOSE_OPTIONS = {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -10,7 +13,7 @@ export const init = () => {
     useFindAndModify: false,
     useCreateIndex: true,
   };
-  mongoose.connect(process.env.MONGO_APP_URL!, MONGOOSE_OPTIONS);
+  await mongoose.connect(MONGO_APP_URL!, MONGOOSE_OPTIONS);
 
   const db = mongoose.connection;
 
