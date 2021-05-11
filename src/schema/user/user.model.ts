@@ -1,6 +1,6 @@
 // Libraries
-import { prop as Property, getModelForClass } from '@typegoose/typegoose';
-import { Field as GqlField, ObjectType as GqlObjectType } from 'type-graphql';
+import { prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { Field as GqlField, ObjectType as GqlObjectType } from "type-graphql";
 
 @GqlObjectType()
 export class User {

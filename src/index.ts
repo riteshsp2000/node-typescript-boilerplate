@@ -1,20 +1,21 @@
-import 'reflect-metadata';
-import 'dotenv/config';
+import "reflect-metadata";
+import "dotenv/config";
 
 // Libraries
-import { ApolloServer } from 'apollo-server-express';
-import express from 'express';
-import cors from 'cors';
+import { ApolloServer } from "apollo-server-express";
+import express from "express";
+import cors from "cors";
 
 // Config
-import { init as initMongoose } from './config/mongoose';
-import { CORS_OPTIONS } from './config/cors';
+import { init as initMongoose } from "./config/mongoose";
+import { CORS_OPTIONS } from "./config/cors";
 
 // Schema
-import { schema } from './schema';
+import { schema } from "./schema";
 
 // Constants
-import { PORT, IS_PROD } from './constants';
+import { PORT, IS_PROD } from "./constants";
+// @ts-ignore
 
 (async () => {
   initMongoose();
@@ -24,8 +25,8 @@ import { PORT, IS_PROD } from './constants';
 
   const apolloServer = new ApolloServer({
     schema: await schema,
-    playground: IS_PROD,
-    debug: IS_PROD,
+    playground: !IS_PROD,
+    debug: !IS_PROD,
   });
 
   apolloServer.applyMiddleware({
