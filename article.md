@@ -343,3 +343,44 @@ getUserById(
 - The updateUser mutation is a bit different. Here we are getting an object with the required arguments as input instead of each argument. This is why we defined an object above called UserInputType with the possible arguments as fields.
 - We also get access to the Context object using the `@Ctx` decorator which we then can use to perform our authorization checks.
 - Last one is a good old deleteUser mutation which then completes all our CRUD operations.
+
+## Bringing it all together.
+
+Now we have our entire schema, types, mutations and queries all set up. The final step is to build the graphql schema and configure apollo-server.
+
+```ts
+import { ApolloServer } from 'apollo-server';
+import { buildSchema } from 'type-graphql';
+import { UserResolver } from './schema/UserResolver';
+
+const init = async () => {
+  /* Code to initialize MongoDB */
+
+  // Build type-graphql executable schema
+  const schema = await buildSchema({
+    resolvers: [UserResolver],
+  });
+
+  // Initialize Apollo Server
+  const server = new ApolloServer({ schema });
+
+  // Listen to the server
+  const { url } = await server.listen(4000);
+  console.log(`Server is running, GraphQL playground available at ${url}`);
+};
+
+init();
+```
+
+## Conclusion
+
+While type-graphql has a rather steep learning curve and can look janky in the beginning, I assure to you maintaining the project in the long run is going to be effortless. Having a single source of truth also avoids code repetion and moreover prevents any sort of error while developing. Typegraphql along with a supporting library works like a charm. One thing to note, though the article showcases the benefits of using Typegraphql and Typegoose together, it doesn't mean that you can use them separately. Depending upon your requirements, you may use either of the tools or a combination of them. (Another popular library is TypeORM)
+
+The article covers a relatively basic setup with all CRUD operations. You can find advanced setup and configurations for production level projects. Following are the links to the documentations of the various technologies used in this article.
+
+[Type-GraphQL](https://typegraphql.com/)
+[Typegoose](https://typegoose.github.io/typegoose/)
+[Typescript](typescriptlang.org)
+[GraphQL](https://graphql.org/)
+
+You can find the referenced code at this [repo](https://github.com/riteshsp2000/node-typescript-boilerplate)
