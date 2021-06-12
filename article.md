@@ -23,13 +23,14 @@ Most of the production level code these days is written in Typescript owing to i
 The following example shows a Mongoose schema, an Interface (type definition) for the schema, and the corresponding GraphQL type definition
 
 ```ts
-// ================ User.js ================
+// ================ User.ts ================
 // Typescript Interface Definition
 export interface IUser {
   name: string;
   email: string;
-  username: string;
+  userName: string;
   password: string;
+  articles: IArticle[];
 }
 
 // MongoDB, Mongoose Schema definition
@@ -45,11 +46,19 @@ const useSchema = new Schema({
   userName: {
     type: String,
     required: false,
+    unique,
+    default: generateUserName(),
   },
   password: {
     type: String,
     required: true,
   },
+  articles: [
+    {
+      type: Schema.Types.ObjectId,
+      required: false,
+    },
+  ],
 });
 
 export const UserModel = mongoose.model('User', userSchema);
@@ -57,11 +66,52 @@ export const UserModel = mongoose.model('User', userSchema);
 // GraphQL Type Definition (either one works)
 export const types = gql`
   type User {
-    _id: ID
+    id: ID
     name: String
     email: String
     userName: String
     password: String
+    articles: [Article]
+  }
+`;
+```
+
+```ts
+// ================ Article.ts ================
+// Typescript Interface Definition
+export interface IArticle {
+  title: string;
+  content: string;
+  author: IUser[];
+}
+
+// MongoDB, Mongoose Schema definition
+const useSchema = new Schema({
+  title: {
+    type: String,
+    required: true,
+  },
+  content: {
+    type: String,
+    required: true,
+  },
+  authors: [
+    {
+      type: Schema.Types.ObjectId,
+      required: true,
+    },
+  ],
+});
+
+export const UserModel = mongoose.model('User', userSchema);
+
+// GraphQL Type Definition (either one works)
+export const types = gql`
+  type User {
+    id: ID
+    title: String
+    content: String
+    authors: [User]
   }
 `;
 ```
@@ -110,35 +160,77 @@ yarn add typegoose
 
 For optional configurations, you can check out the installation page of typegraphql [here](https://typegraphql.com/docs/installation.html).
 
-Usage
+## Usage
+
 Following is the definition that takes care of all the three types/schemas i.e. Mongoose Schema, Typescript interface and GraphQL type definition.
 
-```js
+```ts
 // Libraries
-import { prop, getModelForClass } from "@typegoose/typegoose";
-import { Field as Field, ObjectType } from "type-graphql";
+import { prop as Property, getModelForClass } from '@typegoose/typegoose';
+import { Field, ObjectType } from 'type-graphql';
+import { ObjectId } from 'mongodb';
 
-@ObjectType()
+// Models
+import { ArticleModel } from './Article.ts';
+
+@ObjectType({ description: 'The User Model' })
 export class User {
-  @Field(type => ID, {nullable: false})
-  _id!: string;
+  @Field((type) => ID)
+  readonly _id: ObjectId;
 
-  @prop({ required: true })
-  @Field(() => String)
+  @Property({ required: true })
+  @Field({ description: 'Name of the user' })
   name: string;
 
-  @prop({ required: true })
-  @Field(() => String)
+  @Property({ required: true, unique: true })
+  @Field()
   email: string;
 
-  @prop()
-  @Field(() => String)
-  username: string;
+  @Property({ required: false, default: generateUserName() })
+  @Field({ nullable: true })
+  username?: string;
 
-  @prop()
-  @Field(() => String)
+  @Property({ required: true })
   password: string;
+
+  @Property({ required: false, default: [] })
+  @Field((type) => [string], { name: 'articleIds' })
+  articles: string[];
+
+  @Field((type) => [Article])
+  get articles(): Article[] {
+    return this.articles.map(
+      async (articleId) => await ArticleModel.findById(articleId)
+    );
+  }
 }
 
 export const UserModel = getModelForClass(User);
 ```
+
+## Description
+
+What exactly is going on here? might be your question. Worry not! At first this syntax feels a bit junky and uneasing but once you get to know what each line of code here represents, it becomes easy to understand the code.
+
+Typegraphql uses classes and decorators for definition of the types. The main reason for doing so is that Typescript has interfaces which are nothing but classes. You can find more about decorators here.
+
+- To start with, we decorate the class with the `@ObjectType` decorator which marks the class as the type known from the GraphQL SDL or GraphQLObjectType.
+- The name given to the class is also the name of the Typescript Interface and Mongoose Schema.
+- Each property of the object is then defined in the class using `@Field` and `@prop` decorators. (Note: Here I have renamed the prop decorator to Property at the time of import for consistency.)
+- `@Field` decorator imported from `type-graphql` is used to define a GraphQL Field and the arguments passed to this configure the graphql field.
+- `@prop` decorator imported from `typegoose` is used to defined the individual properties that we use to define a field in the mongoose schema.
+- Below each field, a variable and its type is defined as per a Typescript interface. These variables can then be used anywhere in the class.
+
+- `@Field` takes in 2 parameters, one that defines the type of the graphql field and the second an object that configures this particular field.
+- In the first property i.e. \_id, we pass a function to `@Field` whose return type is ID (ID here corresponds to GraphQLID or ID from graphql).
+- The reason for using a function to define the type of the field instead of having a property in an object is to avoid circular dependency.
+- In the second property i.e. name, we pass a configuration object to `@Field` which sets the description of that particular field.
+
+- The `password`, `articles` and `get articles()` fields are a bit strange looking.
+- Password is one such field that we want to store in the database but dont want to resolve it in a graphql query. For this to happen, we don't decorate this property with `@Field` decorator and just add the `@prop`.
+- As per our mongodb schema, articles is an array of article ids. The idea is that we wish to resolve this and return an array of articles instead of just articles.
+- To achieve this, we pass in a configuration property called `name` to the `@Field`. What it does is, the name of the graphql field will be set to whatever we configure(here it is articleIds). And within the class and the schema it'll store as articles (as we want it).
+- The final field is the `get articles()` one. As you can see we haven't used the `@prop` decorator which means that this field will not be present in the schema.
+- This part of the code creates a graphql field which will be resolved as per the function that we have specified. In this case, we are mapping over the article ids (this.articles) and finding each article from the Database and returning an array of articles.
+
+That covers most of the ways how we'll define our types. It's just one class that takes care of MongoDB Schema, Typescript interface, GraphQL Type. You can create a similar ObjectType for Article as well. Once types are defined the next steps are Queries and Mutations. Following is an example how we are going to define them.
