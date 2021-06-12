@@ -2,19 +2,18 @@
 
 ## Introduction
 
-In this article, we will be trying to solve one of the most common problems encountered while developing a GraphQL based backend with MongoDB and Mongoose. Before we start, here is a quick overlook of the major technologies that we’ll be dealing with.
+In this article, we will be trying to solve one of the most common problems encountered while developing a GraphQL based backend with Typescript and MongoDB. Before we start, here is a quick overlook of the major technologies that we’ll be dealing with.
 
-Typescript is an open-source language that builds on JavaScript by adding static type definitions. Types provide a way to describe the shape of an object, providing better documentation and allowing TypeScript to validate that your code is working correctly.
+- Typescript is an open-source language that builds on JavaScript by adding static type definitions. Types provide a way to describe the shape of an object, providing better documentation and allowing TypeScript to validate that your code is working correctly.
 
-GraphQL is a query language for APIs and a runtime for fulfilling those queries with your existing data. GraphQL provides a complete and understandable description of the data in your API, gives clients the power to ask for exactly what they need and nothing more, makes it easier to evolve APIs over time and enables powerful developer tools.
+- GraphQL is a query language for APIs and a runtime for fulfilling those queries with your existing data. GraphQL provides a complete and understandable description of the data in your API, gives clients the power to ask for exactly what they need and nothing more, makes it easier to evolve APIs over time and enables powerful developer tools.
 
 ## Prerequisites
 
 The article assumes that you have a working knowledge of TypeScript, MongoDB, GraphQL and Node.js. Before you begin, you will need:
 
-1. A basic Node.js server setup with Express.js (or any framework of your choice.)
-2. A GraphQL server setup with your Node server (popular examples include Apollo-Server, Express-GraphQL)
-3. MongoDB setup with your server. (Either local DB or MongoDB Atlas)
+1. A GraphQL server setup with your Node server (popular examples include Apollo-Server, Express-GraphQL)
+2. MongoDB setup with your server. (Either local DB or MongoDB Atlas)
 
 ## The Problem: Multiple Sources of Truth
 
@@ -165,6 +164,7 @@ For optional configurations, you can check out the installation page of typegrap
 Following is the definition that takes care of all the three types/schemas i.e. Mongoose Schema, Typescript interface and GraphQL type definition.
 
 ```ts
+// ================ UserType.ts ================
 // Libraries
 import { prop as Property, getModelForClass } from '@typegoose/typegoose';
 import { Field, ObjectType } from 'type-graphql';
@@ -210,7 +210,7 @@ export const UserModel = getModelForClass(User);
 
 ## Description
 
-What exactly is going on here? might be your question. Worry not! At first this syntax feels a bit junky and uneasing but once you get to know what each line of code here represents, it becomes easy to understand the code.
+What exactly is going on here? might be your question. Worry not! At first, this syntax feels a bit junky and uneasing but once you get to know what each line of code here represents, it becomes easy to understand the code.
 
 Typegraphql uses classes and decorators for definition of the types. The main reason for doing so is that Typescript has interfaces which are nothing but classes. You can find more about decorators here.
 
@@ -234,3 +234,112 @@ Typegraphql uses classes and decorators for definition of the types. The main re
 - This part of the code creates a graphql field which will be resolved as per the function that we have specified. In this case, we are mapping over the article ids (this.articles) and finding each article from the Database and returning an array of articles.
 
 That covers most of the ways how we'll define our types. It's just one class that takes care of MongoDB Schema, Typescript interface, GraphQL Type. You can create a similar ObjectType for Article as well. Once types are defined the next steps are Queries and Mutations. Following is an example how we are going to define them.
+
+```ts
+// ================ UserResolver.ts ================
+// Libraries
+import {
+  Resolver,
+  Query,
+  Arg,
+  Ctx,
+  Mutation,
+  InputType
+} from 'type-graphql';
+
+// Types
+import { UserType, UserModel } from './User';
+
+// Input Type
+@InputType()
+export class userInputType {
+  @Field()
+  name: string;
+
+  @Field()
+  email: string;
+
+  @Field({nullable: true})
+  username?: string
+
+  @Field()
+}
+
+@Resolver((of) => UserType)
+export class UserResolver {
+  @Query((returns) => [User], { description: "Returns an array of all Users"  })
+  async getUsers(): Promise<User[]> {
+    return await UserModel.find({});
+  }
+
+  @Query((returns) => User, { nullable: true })
+  async getUserById(@Args('id') id: string): Promise<User | undefined> {
+    return await UserModel.findById(id)
+  }
+
+  @Mutation((returns) => User)
+  async addUser(
+    @Arg("name") name: string,
+    @Arg("email") email: string,
+    @Arg("username") name?: string,
+    @Arg("password") name: string,
+  ): Promise<User | Error> {
+    const existingUser = await UserModel.find({email})
+    if (existingUser) throw new Error('User already Exists')
+
+    const newUser = new UserModel({
+      ...userInput,
+      articles: []
+    })
+    return await newUser.save();
+  }
+
+  @Mutation((returns) => User)
+  async updateUser(
+    @Arg("user") userInput: userInputType
+    @Ctx() ctx: Context,
+  ): Promise<User | Error> {
+    if (!ctx.user) throw new Error("User not authorized.")
+
+    return await UserModel.findOneAndUpdate({email}, {
+      name,
+      email,
+      username,
+      password,
+    })
+  }
+
+  @Mutation((returns) => boolean)
+  async deleteUser(
+    @Arg("id") id: ID,
+    @Ctx() ctx: Context,
+  ): Promise<boolean | Error> {
+    if (!ctx.user) throw new Error("User not authorized")
+
+    await UserModel.findByIdAndDelete(id)
+    return true,
+  }
+}
+```
+
+## Description
+
+Here we go again! But this time you might be having some insights as to what is happening. Lets get to the breakdown.
+
+- Just like object definitions, type-graphql provides us with decorators to describe the various properties. Lets start from the UserResolver. (We'll come back to the UserInputType later)
+- UserResolver is class that contains all the queries and mutations related to the user. Unlike the object type definition, here the name doesn't signify much and can be considered as a housing for the queries and mutation (you'll see later why)
+- We have our first query called getUsers decorated by the `@Query` decorator which returns an array of Users. The Query can be configured through the configuration object as shown.
+- In the second one we see that we are getting an input from the client. This is implemented using the `@Args` decorator. The syntax is bit tricky but visualizing it as follows might help you understand it.
+
+```ts
+getUserById(
+  @Args('id')
+  id: string,
+): Promise<User | undefined>
+```
+
+- Just like the `@Field` decorator, we add the `@Args` decorator before every argument.
+- The next one we have is the addUser Mutation which is decorated by the `@Mutation`. All of these decorators follow the same pattern. Here we are getting multiple arguments, checking for existing user, creating a new one and returning it.
+- The updateUser mutation is a bit different. Here we are getting an object with the required arguments as input instead of each argument. This is why we defined an object above called UserInputType with the possible arguments as fields.
+- We also get access to the Context object using the `@Ctx` decorator which we then can use to perform our authorization checks.
+- Last one is a good old deleteUser mutation which then completes all our CRUD operations.
