@@ -17,7 +17,7 @@ The article assumes that you have a working knowledge of TypeScript, MongoDB, Gr
 
 ## The Problem: Multiple Sources of Truth
 
-Most of the production level code these days is written in Typescript owing to its phenomenal type system. Adding GraphQL to this, we can leverage all its benefits such as having a client-driven API, prevent any over-fetching or under fetching of data, reduce the number of API calls, stating typing etc. However, the initial boilerplate code quickly increases when a database comes into the mix. That is, you’ll quickly find yourself maintaining three type definitions for one schema which then creates multiple sources of truth.
+Most of the production level code these days is written in Typescript owing to its phenomenal type system. Adding GraphQL to this, we can leverage all its benefits such as having a client-driven API, prevent any over-fetching or under fetching of data, reduce the number of API calls, static typing etc. However, the initial boilerplate code quickly increases when a database comes into the mix. That is, you’ll quickly find yourself maintaining three type definitions for one schema which then creates multiple sources of truth.
 
 The following example shows a Mongoose schema, an Interface (type definition) for the schema, and the corresponding GraphQL type definition
 
@@ -27,9 +27,9 @@ The following example shows a Mongoose schema, an Interface (type definition) fo
 export interface IUser {
   name: string;
   email: string;
-  userName: string;
+  username: string;
   password: string;
-  articles: IArticle[];
+  articles: string[];
 }
 
 // MongoDB, Mongoose Schema definition
@@ -42,7 +42,7 @@ const useSchema = new Schema({
     type: String,
     required: true,
   },
-  userName: {
+  username: {
     type: String,
     required: false,
     unique,
@@ -75,47 +75,7 @@ export const types = gql`
 `;
 ```
 
-```ts
-// ================ Article.ts ================
-// Typescript Interface Definition
-export interface IArticle {
-  title: string;
-  content: string;
-  author: IUser[];
-}
-
-// MongoDB, Mongoose Schema definition
-const useSchema = new Schema({
-  title: {
-    type: String,
-    required: true,
-  },
-  content: {
-    type: String,
-    required: true,
-  },
-  authors: [
-    {
-      type: Schema.Types.ObjectId,
-      required: true,
-    },
-  ],
-});
-
-export const UserModel = mongoose.model('User', userSchema);
-
-// GraphQL Type Definition (either one works)
-export const types = gql`
-  type User {
-    id: ID
-    title: String
-    content: String
-    authors: [User]
-  }
-`;
-```
-
-## The solution: Single Source of Truth
+## The Solution: Single Source of Truth
 
 By single source of truth, what I mean is, it would be really great if we could have a single definition for each schema. A single file that needs to be changed to make any updates in the future.
 To maintain a single source of truth, there exist multiple libraries such as TypeGraphQL, GraphQL Nexus, TypeORM, Typegoose etc. In this guide, we’ll be using TypeGraphQL as GraphQL Nexus is not well maintained. TypeORM is well suited for Relational Databases and it has some compatibility issues with MongoDB which makes Typegoose as our choice.
@@ -140,24 +100,25 @@ import “reflect-metadata”
 yarn add typegoose
 ```
 
-4. Typescript configuration: It’s important to set these options in the tsconfig.json. Typegraphql uses Decorators and decorators are a stage 2 proposal for Javascript and are available as an experimental feature for Typescript.
-
-```json
-	“compileOptions”: {
-		“emitDecoratorMetadata”: true,
-		“experimentalDecorators”: true,
-}
-```
-
-5. Typegraphql is designed to work with node.js LTS and the latest stable releases. It uses features from ES2018 so we should set our tsconfig.json file appropriately.
+4. Typescript configuration: It’s important to set these options in the tsconfig.json. TypeGraphQL uses decorators and decorators are a stage 2 proposal for Javascript and are available as an experimental feature for Typescript.
 
 ```json
 {
-	“target”: “es2018” // or newer if your node.js version supports this
+  "compileOptions": {
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
 }
 ```
 
-For optional configurations, you can check out the installation page of typegraphql [here](https://typegraphql.com/docs/installation.html).
+5. Typegraphql is designed to work with Node.js LTS and the latest stable releases. It uses features from ES2018 so we should set our tsconfig.json file appropriately.
+
+```json
+{
+  "target": "es2018" // or newer if your node.js version supports this
+}
+```
+
+For optional configurations, you can check out the installation page of TypeGraphQL [here](https://typegraphql.com/docs/installation.html).
 
 ## Usage
 
@@ -166,8 +127,8 @@ Following is the definition that takes care of all the three types/schemas i.e. 
 ```ts
 // ================ UserType.ts ================
 // Libraries
-import { prop as Property, getModelForClass } from '@typegoose/typegoose';
 import { Field, ObjectType } from 'type-graphql';
+import { prop as Property, getModelForClass } from '@typegoose/typegoose';
 import { ObjectId } from 'mongodb';
 
 // Models
@@ -210,28 +171,28 @@ export const UserModel = getModelForClass(User);
 
 ## Description
 
-What exactly is going on here? might be your question. Worry not! At first, this syntax feels a bit junky and uneasing but once you get to know what each line of code here represents, it becomes easy to understand the code.
+What exactly is going on here? might be your question. Worry not! At first, this syntax feels a bit janky and uneasing but once you get to know what each line of code here represents, it becomes easy to understand the code.
 
-Typegraphql uses classes and decorators for definition of the types. The main reason for doing so is that Typescript has interfaces which are nothing but classes. You can find more about decorators here.
+TypeGraphQL uses classes and decorators for definition of the types. The main reason for doing so is that Typescript has interfaces which are nothing but classes. You can find more about decorators [here](https://medium.com/google-developers/exploring-es7-decorators-76ecb65fb841).
 
 - To start with, we decorate the class with the `@ObjectType` decorator which marks the class as the type known from the GraphQL SDL or GraphQLObjectType.
 - The name given to the class is also the name of the Typescript Interface and Mongoose Schema.
 - Each property of the object is then defined in the class using `@Field` and `@prop` decorators. (Note: Here I have renamed the prop decorator to Property at the time of import for consistency.)
-- `@Field` decorator imported from `type-graphql` is used to define a GraphQL Field and the arguments passed to this configure the graphql field.
-- `@prop` decorator imported from `typegoose` is used to defined the individual properties that we use to define a field in the mongoose schema.
+- `@Field` decorator imported from `type-graphql` is used to define a GraphQL Field and the arguments passed to this would configure the graphql field.
+- `@prop` decorator imported from `typegoose` is used to specify the individual properties that we use to define a field in the mongoose schema.
 - Below each field, a variable and its type is defined as per a Typescript interface. These variables can then be used anywhere in the class.
 
-- `@Field` takes in 2 parameters, one that defines the type of the graphql field and the second an object that configures this particular field.
-- In the first property i.e. \_id, we pass a function to `@Field` whose return type is ID (ID here corresponds to GraphQLID or ID from graphql).
+- `@Field` takes in 2 parameters, one that defines the type of the GraphQL field and the second an object that configures this particular field.
+- In the first property i.e. \_id, we pass a function to `@Field` whose return type is ID (ID here corresponds to GraphQLID or ID from GraphQL).
 - The reason for using a function to define the type of the field instead of having a property in an object is to avoid circular dependency.
 - In the second property i.e. name, we pass a configuration object to `@Field` which sets the description of that particular field.
 
 - The `password`, `articles` and `get articles()` fields are a bit strange looking.
-- Password is one such field that we want to store in the database but dont want to resolve it in a graphql query. For this to happen, we don't decorate this property with `@Field` decorator and just add the `@prop`.
-- As per our mongodb schema, articles is an array of article ids. The idea is that we wish to resolve this and return an array of articles instead of just articles.
+- Password is one such field that we want to store in the database but dont want to resolve it in a GraphQL query. For this to happen, we don't decorate this property with `@Field` decorator and just add the `@prop`.
+- As per our MongoDB schema, articles is an array of article ids. The idea is that we wish to resolve this and return an array of articles instead of just article IDs.
 - To achieve this, we pass in a configuration property called `name` to the `@Field`. What it does is, the name of the graphql field will be set to whatever we configure(here it is articleIds). And within the class and the schema it'll store as articles (as we want it).
-- The final field is the `get articles()` one. As you can see we haven't used the `@prop` decorator which means that this field will not be present in the schema.
-- This part of the code creates a graphql field which will be resolved as per the function that we have specified. In this case, we are mapping over the article ids (this.articles) and finding each article from the Database and returning an array of articles.
+- The final field is the `get articles()` one. As you can see we haven't used the `@prop` decorator which means that this field will not be create in the mongoose schema.
+- This part of the code creates a GraphQL field which will be resolved as per the function that we have specified. In this case, we are mapping over the article ids (this.articles) and finding each article from the Database and returning an array of articles.
 
 That covers most of the ways how we'll define our types. It's just one class that takes care of MongoDB Schema, Typescript interface, GraphQL Type. You can create a similar ObjectType for Article as well. Once types are defined the next steps are Queries and Mutations. Following is an example how we are going to define them.
 
@@ -263,6 +224,7 @@ export class userInputType {
   username?: string
 
   @Field()
+  password: string
 }
 
 @Resolver((of) => UserType)
@@ -281,14 +243,17 @@ export class UserResolver {
   async addUser(
     @Arg("name") name: string,
     @Arg("email") email: string,
-    @Arg("username") name?: string,
-    @Arg("password") name: string,
+    @Arg("username") username?: string,
+    @Arg("password") password: string,
   ): Promise<User | Error> {
     const existingUser = await UserModel.find({email})
     if (existingUser) throw new Error('User already Exists')
 
     const newUser = new UserModel({
-      ...userInput,
+      name,
+      email,
+      username,
+      password: hashPassword(password),
       articles: []
     })
     return await newUser.save();
@@ -301,12 +266,7 @@ export class UserResolver {
   ): Promise<User | Error> {
     if (!ctx.user) throw new Error("User not authorized.")
 
-    return await UserModel.findOneAndUpdate({email}, {
-      name,
-      email,
-      username,
-      password,
-    })
+    return await UserModel.findOneAndUpdate({email}, userInput)
   }
 
   @Mutation((returns) => boolean)
@@ -340,7 +300,7 @@ getUserById(
 
 - Just like the `@Field` decorator, we add the `@Args` decorator before every argument.
 - The next one we have is the addUser Mutation which is decorated by the `@Mutation`. All of these decorators follow the same pattern. Here we are getting multiple arguments, checking for existing user, creating a new one and returning it.
-- The updateUser mutation is a bit different. Here we are getting an object with the required arguments as input instead of each argument. This is why we defined an object above called UserInputType with the possible arguments as fields.
+- The updateUser mutation is a bit different. Here we are getting an object with the required arguments as input object instead of each argument. This is why we defined a class above called UserInputType with the possible arguments as fields.
 - We also get access to the Context object using the `@Ctx` decorator which we then can use to perform our authorization checks.
 - Last one is a good old deleteUser mutation which then completes all our CRUD operations.
 
@@ -374,7 +334,7 @@ init();
 
 ## Conclusion
 
-While type-graphql has a rather steep learning curve and can look janky in the beginning, I assure to you maintaining the project in the long run is going to be effortless. Having a single source of truth also avoids code repetion and moreover prevents any sort of error while developing. Typegraphql along with a supporting library works like a charm. One thing to note, though the article showcases the benefits of using Typegraphql and Typegoose together, it doesn't mean that you can use them separately. Depending upon your requirements, you may use either of the tools or a combination of them. (Another popular library is TypeORM)
+While TypeGraphQL has a rather steep learning curve and can look janky in the beginning, I assure to you that maintaining the project in the long run is going to be effortless. Having a single source of truth also avoids code repetion and moreover prevents any sort of error while developing. TypeGraphQL along with a supporting library works like a charm. One thing to note, though the article showcases the benefits of using TypeGraphQL and Typegoose together, it doesn't mean that you can't use them separately. Depending upon your requirements, you may use either of the tools or a combination of them. (Another popular library is TypeORM)
 
 The article covers a relatively basic setup with all CRUD operations. You can find advanced setup and configurations for production level projects. Following are the links to the documentations of the various technologies used in this article.
 
